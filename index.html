@@ -2,17 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MPSC Target - Practice Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPSC Target</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font-family:Arial;background:#f1f4f9;margin:0;color:#172033}
-header{background:#142d55;color:white;padding:22px;text-align:center}
-.container{max-width:700px;margin:25px auto;padding:20px}
-.card{background:white;padding:22px;border-radius:12px;box-shadow:0 3px 12px #ccd2dc}
-button{padding:12px 18px;border:0;border-radius:7px;background:#174b91;color:white;margin:5px;cursor:pointer}
-.option{display:block;width:100%;text-align:left;background:#edf2fa;color:#172033;margin:10px 0}
-.option.selected{background:#c8ddff;border:2px solid #174b91}
-#timer{font-weight:bold;color:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:#f1f4f9;color:#172033}
+header{background:#142d55;color:white;padding:20px;text-align:center}
+main{max-width:750px;margin:25px auto;padding:15px}
+.card{background:white;padding:20px;border-radius:12px;margin-bottom:16px;box-shadow:0 3px 12px #ccd2dc}
+input,select,textarea{width:100%;padding:12px;margin:8px 0;border:1px solid #ccd2dc;border-radius:7px}
+button{background:#174b91;color:white;border:0;padding:12px 17px;border-radius:7px;margin:5px 3px;cursor:pointer}
+.secondary{background:#65758b}
+.hidden{display:none}
+h2{color:#174b91}
+#message{padding:12px;margin:10px 0}
 </style>
 </head>
 <body>
@@ -20,61 +24,247 @@ button{padding:12px 18px;border:0;border-radius:7px;background:#174b91;color:whi
 <h1>MPSC TARGET</h1>
 <p>Practice • Improve • Succeed</p>
 </header>
-<div class="container">
+<main>
+<div id="message"></div>
+
+<section id="auth" class="card">
+<h2>Welcome to MPSC Target</h2>
+<p>Login or register with your invited email.</p>
+<input id="email" type="email" placeholder="Email address">
+<input id="password" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+<button onclick="signup()">Student Registration</button>
+</section>
+
+<section id="dashboard" class="hidden">
 <div class="card">
-<h3>General Studies - Practice Test</h3>
-<p>Questions: 10 | Marks: 10 | Time: <span id="timer">30:00</span></p>
-<hr>
-<h3 id="question"></h3>
-<div id="options"></div>
-<p id="progress"></p>
-<button onclick="previous()">Previous</button>
-<button onclick="next()">Next</button>
-<button onclick="submitTest()">Submit Test</button>
-<div id="result"></div>
+<h2>Dashboard</h2>
+<p id="welcome"></p>
+<p id="role"></p>
+<button class="secondary" onclick="logout()">Logout</button>
+</div>
+
+<div id="admin" class="hidden">
+<div class="card">
+<h2>Admin Panel</h2>
+<h3>Invite Student</h3>
+<input id="inviteEmail" type="email" placeholder="Student email address">
+<button onclick="inviteStudent()">Send Invitation</button>
+</div>
+
+<div class="card">
+<h3>Create New Test</h3>
+<input id="testTitle" placeholder="Test name">
+<select id="subject">
+<option>History</option>
+<option>Geography</option>
+<option>Indian Polity</option>
+<option>Economics</option>
+<option>General Science</option>
+<option>Mathematics</option>
+<option>Reasoning</option>
+<option>Current Affairs</option>
+</select>
+<input id="duration" type="number" value="30" placeholder="Duration in minutes">
+<button onclick="createTest()">Create Test</button>
+<p id="testStatus"></p>
+</div>
+
+<div class="card">
+<h3>Bulk Question Upload</h3>
+<p>First create a test, then select it below.</p>
+<select id="testSelect">
+<option value="">Select a test</option>
+</select>
+<p>Upload CSV with these columns:</p>
+<code>question,optionA,optionB,optionC,optionD,correct_index,explanation</code>
+<p>Correct index: A = 0, B = 1, C = 2, D = 3.</p>
+<input type="file" id="csvFile" accept=".csv">
+<button onclick="uploadCSV()">Upload Questions</button>
+<p id="uploadStatus"></p>
 </div>
 </div>
+
+<div id="student" class="card hidden">
+<h2>Student Dashboard</h2>
+<p>Your account is active. Tests will appear here once the secure test system is ready.</p>
+</div>
+</section>
+</main>
+
 <script>
-const questions=[
-{q:"Who is known as the Father of the Indian Constitution?",o:["Mahatma Gandhi","Dr. B. R. Ambedkar","Jawaharlal Nehru","Sardar Patel"],a:1,e:"Dr. B. R. Ambedkar was Chairman of the Drafting Committee."},
-{q:"When did the Indian Constitution come into force?",o:["15 August 1947","26 November 1949","26 January 1950","2 October 1950"],a:2,e:"The Constitution came into force on 26 January 1950."},
-{q:"Which is the largest state of India by area?",o:["Maharashtra","Madhya Pradesh","Rajasthan","Uttar Pradesh"],a:2,e:"Rajasthan is the largest Indian state by area."},
-{q:"Who was the first President of India?",o:["Dr. Rajendra Prasad","S. Radhakrishnan","Zakir Hussain","V. V. Giri"],a:0,e:"Dr. Rajendra Prasad was India's first President."},
-{q:"Where is the headquarters of RBI?",o:["Delhi","Mumbai","Kolkata","Chennai"],a:1,e:"The Reserve Bank of India headquarters is in Mumbai."},
-{q:"Which river is known as Dakshin Ganga?",o:["Krishna","Godavari","Kaveri","Narmada"],a:1,e:"Godavari is popularly known as Dakshin Ganga."},
-{q:"Who founded the Satyashodhak Samaj?",o:["B. R. Ambedkar","Jyotiba Phule","Gopal Krishna Gokhale","Bal Gangadhar Tilak"],a:1,e:"Jyotiba Phule founded it in 1873."},
-{q:"What is the minimum age to become a Lok Sabha member?",o:["21 years","25 years","30 years","35 years"],a:1,e:"The minimum age is 25 years."},
-{q:"Which gas is absorbed by plants during photosynthesis?",o:["Oxygen","Nitrogen","Carbon dioxide","Hydrogen"],a:2,e:"Plants absorb carbon dioxide during photosynthesis."},
-{q:"Which is the highest peak in Maharashtra?",o:["Kalsubai","Salher","Harishchandragad","Mahabaleshwar"],a:0,e:"Kalsubai is the highest peak in Maharashtra."}
-];
-let current=0,answers={},finished=false,remaining=1800;
-function show(){
-if(finished)return;
-let q=questions[current];
-document.getElementById("question").innerText=(current+1)+". "+q.q;
-document.getElementById("options").innerHTML=q.o.map((x,i)=>`<button class="option ${answers[current]===i?'selected':''}" onclick="choose(${i})">${String.fromCharCode(65+i)}. ${x}</button>`).join("");
-document.getElementById("progress").innerText="Question "+(current+1)+" of "+questions.length;
+const SUPABASE_URL = "https://clmbeouqkgyudnlirkcf.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable_wjOfHVj9lgOnk5p18HtfJA_aeSPNhnf";
+
+const db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+let currentUser = null;
+let currentRole = null;
+
+function msg(text){
+ document.getElementById("message").textContent=text;
 }
-function choose(i){if(finished)return;answers[current]=i;show()}
-function next(){if(current<questions.length-1){current++;show()}}
-function previous(){if(current>0){current--;show()}}
-function submitTest(){
-if(finished)return;
-if(!confirm("Are you sure you want to submit the test?"))return;
-finished=true;clearInterval(clock);
-let score=questions.filter((q,i)=>answers[i]===q.a).length;
-document.getElementById("question").innerText="Test Completed!";
-document.getElementById("options").innerHTML="";
-document.getElementById("progress").innerText="";
-document.getElementById("result").innerHTML=`<h2>Your Score: ${score}/10</h2><h3>Answer Review</h3>`+questions.map((q,i)=>`<p><b>${i+1}. ${q.q}</b><br>Your answer: ${answers[i]===undefined?"Not attempted":q.o[answers[i]]}<br>Correct answer: ${q.o[q.a]}<br><small>${q.e}</small></p>`).join("");
+
+async function login(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ const {data,error}=await db.auth.signInWithPassword({email,password});
+ if(error){msg(error.message);return;}
+ await loadDashboard(data.user);
 }
-const clock=setInterval(()=>{
-if(finished)return;
-remaining--;
-document.getElementById("timer").innerText=String(Math.floor(remaining/60)).padStart(2,"0")+":"+String(remaining%60).padStart(2,"0");
-if(remaining<=0)submitTest();
-},1000);
-show();
+
+async function signup(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ if(password.length<8){msg("Password must be at least 8 characters.");return;}
+ const {data,error}=await db.auth.signUp({email,password});
+ if(error){msg(error.message);return;}
+ msg("Registration submitted. Check your email for confirmation if required.");
+ if(data.session) await loadDashboard(data.user);
+}
+
+async function loadDashboard(user){
+ currentUser=user;
+ const {data:profile,error}=await db.from("profiles")
+ .select("role,email").eq("id",user.id).single();
+
+ if(error || !profile){
+   msg("Profile not found. Contact the administrator.");
+   return;
+ }
+ currentRole=profile.role;
+ document.getElementById("auth").classList.add("hidden");
+ document.getElementById("dashboard").classList.remove("hidden");
+ document.getElementById("welcome").textContent="Welcome, "+profile.email;
+ document.getElementById("role").textContent="Account: "+profile.role;
+
+ if(currentRole==="admin"){
+   document.getElementById("admin").classList.remove("hidden");
+   document.getElementById("student").classList.add("hidden");
+   loadTests();
+ }else{
+   document.getElementById("student").classList.remove("hidden");
+   document.getElementById("admin").classList.add("hidden");
+ }
+}
+
+async function logout(){
+ await db.auth.signOut();
+ location.reload();
+}
+
+async function inviteStudent(){
+ const email=document.getElementById("inviteEmail").value.trim().toLowerCase();
+ if(!email){msg("Enter student email.");return;}
+ const {error}=await db.from("invitations").insert({email});
+ if(error){msg(error.message);return;}
+ msg("Invitation added for "+email+". Student can now register.");
+ document.getElementById("inviteEmail").value="";
+}
+
+async function createTest(){
+ const title=document.getElementById("testTitle").value.trim();
+ const subject=document.getElementById("subject").value;
+ const duration=Number(document.getElementById("duration").value);
+ if(!title || !duration || duration<1){msg("Enter valid test details.");return;}
+
+ const {data,error}=await db.from("tests").insert({
+   title,subject,duration_minutes:duration,published:false
+ }).select().single();
+
+ if(error){msg(error.message);return;}
+ document.getElementById("testStatus").textContent="Test created: "+data.title;
+ document.getElementById("testTitle").value="";
+ loadTests();
+}
+
+async function loadTests(){
+ const {data,error}=await db.from("tests")
+ .select("id,title,subject")
+ .order("id",{ascending:false});
+
+ if(error){msg(error.message);return;}
+ const select=document.getElementById("testSelect");
+ select.innerHTML='<option value="">Select a test</option>';
+ data.forEach(t=>{
+  const option=document.createElement("option");
+  option.value=t.id;
+  option.textContent=t.title+" - "+t.subject;
+  select.appendChild(option);
+ });
+}
+
+// CSV parser supports quoted fields and commas inside quotes
+function parseCSV(text){
+ const rows=[];
+ let row=[],field="",quoted=false;
+ for(let i=0;i<text.length;i++){
+  const c=text[i];
+  if(c==='"'){
+   if(quoted && text[i+1]==='"'){field+='"';i++;}
+   else quoted=!quoted;
+  }else if(c===',' && !quoted){
+   row.push(field);field="";
+  }else if((c==='\n'||c==='\r')&&!quoted){
+   if(c==='\r'&&text[i+1]==='\n')i++;
+   row.push(field);field="";
+   if(row.some(x=>x.trim()!==""))rows.push(row);
+   row=[];
+  }else field+=c;
+ }
+ row.push(field);
+ if(row.some(x=>x.trim()!==""))rows.push(row);
+ return rows;
+}
+
+async function uploadCSV(){
+ const testId=document.getElementById("testSelect").value;
+ const file=document.getElementById("csvFile").files[0];
+ if(!testId||!file){msg("Select a test and CSV file.");return;}
+
+ const status=document.getElementById("uploadStatus");
+ status.textContent="Reading CSV...";
+ try{
+  const rows=parseCSV(await file.text());
+  if(rows.length<2)throw Error("CSV has no question rows.");
+
+  const headers=rows[0].map(x=>x.trim().toLowerCase());
+  const required=["question","optiona","optionb","optionc","optiond","correct_index","explanation"];
+  const indexes=required.map(h=>headers.indexOf(h));
+  if(indexes.some(i=>i<0))throw Error("CSV headers do not match the required format.");
+
+  const questions=rows.slice(1).map((r,i)=>{
+   const get=h=>r[indexes[required.indexOf(h)]]?.trim()||"";
+   const answer=Number(get("correct_index"));
+   const q=get("question");
+   const options=["optiona","optionb","optionc","optiond"].map(get);
+   if(!q||options.some(x=>!x)||![0,1,2,3].includes(answer))
+    throw Error("Invalid question or answer index on CSV row "+(i+2));
+   return {
+    test_id:Number(testId),
+    question:q,
+    options,
+    correct_index:answer,
+    explanation:get("explanation")
+   };
+  });
+
+  for(let i=0;i<questions.length;i+=100){
+   const {error}=await db.from("questions").insert(questions.slice(i,i+100));
+   if(error)throw error;
+  }
+  status.textContent=questions.length+" questions uploaded successfully.";
+ }catch(e){
+  status.textContent="Upload failed: "+e.message;
+ }
+}
+
+db.auth.getSession().then(({data})=>{
+ if(data.session)loadDashboard(data.session.user);
+});
 </script>
 </body>
 </html>
