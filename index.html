@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPSC Target</title>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial;background:#f1f4f9;color:#172033}
@@ -13,12 +15,19 @@ main{max-width:750px;margin:25px auto;padding:15px}
 .card{background:white;padding:20px;border-radius:12px;margin-bottom:16px;box-shadow:0 3px 12px #ccd2dc}
 input,select,textarea{width:100%;padding:12px;margin:8px 0;border:1px solid #ccd2dc;border-radius:7px}
 button{background:#174b91;color:white;border:0;padding:12px 17px;border-radius:7px;margin:5px 3px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
 .secondary{background:#65758b}
+.danger{background:#bd3030}
+.success{background:#18834b}
 .hidden{display:none}
 h2{color:#174b91}
 #message{padding:12px;margin:10px 0;overflow-wrap:anywhere}
+.student-row{border:1px solid #dce2eb;padding:12px;border-radius:8px;margin:10px 0}
+.student-email{font-weight:bold;overflow-wrap:anywhere}
+.status{font-size:13px;color:#65758b}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -63,10 +72,22 @@ h2{color:#174b91}
 <button class="secondary" onclick="logout()">Logout</button>
 </div>
 
+<!-- ADMIN -->
 <div id="admin" class="hidden">
 
 <div class="card">
 <h2>Admin Panel</h2>
+
+<h3>Pending Student Approvals</h3>
+<p>Approve or reject student registration requests.</p>
+
+<button onclick="loadPendingStudents()">Refresh Students</button>
+<div id="pendingStudents">
+Loading...
+</div>
+</div>
+
+<div class="card">
 <h3>Invite Student</h3>
 <input id="inviteEmail" type="email" placeholder="Student email address">
 <button onclick="inviteStudent()">Send Invitation</button>
@@ -115,9 +136,11 @@ h2{color:#174b91}
 
 </div>
 
+<!-- STUDENT -->
 <div id="student" class="card hidden">
 <h2>Student Dashboard</h2>
-<p>Your account is active. Tests will appear here once the secure test system is ready.</p>
+<p>Your account is active.</p>
+<p>Tests will appear here once the secure test system is ready.</p>
 </div>
 
 </section>
@@ -125,393 +148,574 @@ h2{color:#174b91}
 
 <script>
 const SUPABASE_URL = "https://clmbeouqkgyudnlirkcf.supabase.co";
+
 const SUPABASE_KEY = "sb_publishable_wjOfHVj9lgOnk5p18HtfJA_aeSPNhnf";
 
 const SITE_URL = "https://pratikdhargave0-glitch.github.io/Target-DMER/";
 
 const db = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_KEY
+    SUPABASE_URL,
+    SUPABASE_KEY
 );
 
 let currentUser = null;
 let currentRole = null;
+let dashboardLoading = false;
+
 let recoveryMode = window.location.hash.includes("type=recovery");
 
 function msg(text){
-  document.getElementById("message").textContent = text;
+    document.getElementById("message").textContent = text;
 }
 
 function showLogin(){
-  document.getElementById("auth").classList.remove("hidden");
-  document.getElementById("dashboard").classList.add("hidden");
-  document.getElementById("resetSection").classList.add("hidden");
+    document.getElementById("auth").classList.remove("hidden");
+    document.getElementById("dashboard").classList.add("hidden");
+    document.getElementById("resetSection").classList.add("hidden");
 }
 
 function showResetPassword(){
-  recoveryMode = true;
-  document.getElementById("auth").classList.add("hidden");
-  document.getElementById("dashboard").classList.add("hidden");
-  document.getElementById("resetSection").classList.remove("hidden");
-  msg("Recovery verified. Please set your new password.");
+    recoveryMode = true;
+    document.getElementById("auth").classList.add("hidden");
+    document.getElementById("dashboard").classList.add("hidden");
+    document.getElementById("resetSection").classList.remove("hidden");
+    msg("Recovery verified. Please set your new password.");
 }
 
+// LOGIN
 async function login(){
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
 
-  if(!email || !password){
-    msg("Enter email and password.");
-    return;
-  }
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
 
-  const {data,error} = await db.auth.signInWithPassword({
-    email,password
-  });
+    if(!email || !password){
+        msg("Enter email and password.");
+        return;
+    }
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {data,error} = await db.auth.signInWithPassword({
+        email,password
+    });
 
-  recoveryMode = false;
-  await loadDashboard(data.user);
-}
+    if(error){
+        msg(error.message);
+        return;
+    }
 
-async function signup(){
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
-
-  if(!email || password.length < 8){
-    msg("Enter a valid email and password of at least 8 characters.");
-    return;
-  }
-
-  const {data,error} = await db.auth.signUp({
-    email,password
-  });
-
-  if(error){
-    msg(error.message);
-    return;
-  }
-
-  msg("Registration submitted. Check your email for confirmation if required.");
-
-  if(data.session){
+    recoveryMode = false;
     await loadDashboard(data.user);
-  }
 }
 
-// SEND PASSWORD RECOVERY EMAIL
+// STUDENT REGISTRATION
+async function signup(){
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    if(!email || password.length < 8){
+        msg("Enter a valid email and password of at least 8 characters.");
+        return;
+    }
+
+    const {data,error} = await db.auth.signUp({
+        email,password
+    });
+
+    if(error){
+        msg(error.message);
+        return;
+    }
+
+    msg("Registration submitted. Check your email for confirmation if required.");
+
+    if(data.session){
+        await loadDashboard(data.user);
+    }
+}
+
+// FORGOT PASSWORD
 async function forgotPassword(){
-  const email = document.getElementById("email").value.trim();
 
-  if(!email){
-    msg("First enter your registered email address.");
-    return;
-  }
+    const email = document.getElementById("email").value.trim();
 
-  const {error} = await db.auth.resetPasswordForEmail(email,{
-    redirectTo: SITE_URL
-  });
+    if(!email){
+        msg("First enter your registered email address.");
+        return;
+    }
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {error} = await db.auth.resetPasswordForEmail(email,{
+        redirectTo: SITE_URL
+    });
 
-  msg("Password recovery email sent. Please check your Gmail.");
+    if(error){
+        msg(error.message);
+        return;
+    }
+
+    msg("Password recovery email sent. Please check your Gmail.");
 }
 
-// UPDATE NEW PASSWORD
+// UPDATE PASSWORD
 async function updatePassword(){
-  const password = document.getElementById("newPassword").value;
-  const confirm = document.getElementById("confirmPassword").value;
 
-  if(password.length < 8){
-    msg("Password must be at least 8 characters.");
-    return;
-  }
+    const password = document.getElementById("newPassword").value;
+    const confirm = document.getElementById("confirmPassword").value;
 
-  if(password !== confirm){
-    msg("Passwords do not match.");
-    return;
-  }
+    if(password.length < 8){
+        msg("Password must be at least 8 characters.");
+        return;
+    }
 
-  const {data,error} = await db.auth.updateUser({
-    password: password
-  });
+    if(password !== confirm){
+        msg("Passwords do not match.");
+        return;
+    }
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {error} = await db.auth.updateUser({
+        password:password
+    });
 
-  recoveryMode = false;
+    if(error){
+        msg(error.message);
+        return;
+    }
 
-  document.getElementById("newPassword").value = "";
-  document.getElementById("confirmPassword").value = "";
+    recoveryMode = false;
 
-  await db.auth.signOut();
+    document.getElementById("newPassword").value = "";
+    document.getElementById("confirmPassword").value = "";
 
-  history.replaceState(null,"",SITE_URL);
+    await db.auth.signOut();
 
-  showLogin();
-  msg("Password updated successfully. Now login with your new password.");
+    history.replaceState(null,"",SITE_URL);
+
+    showLogin();
+
+    msg("Password updated successfully. Now login with your new password.");
 }
 
-// LOAD USER DASHBOARD
+// LOAD DASHBOARD WITH APPROVAL CHECK
 async function loadDashboard(user){
-  currentUser = user;
 
-  const {data:profile,error} = await db.from("profiles")
-    .select("role,email")
-    .eq("id",user.id)
-    .single();
+    if(dashboardLoading) return;
 
-  if(error || !profile){
-    msg("Profile not found. Contact the administrator.");
-    return;
-  }
+    dashboardLoading = true;
+    currentUser = user;
 
-  currentRole = profile.role;
+    try{
 
-  document.getElementById("auth").classList.add("hidden");
-  document.getElementById("resetSection").classList.add("hidden");
-  document.getElementById("dashboard").classList.remove("hidden");
+        const {data:profile,error} = await db.from("profiles")
+            .select("role,email,approval_status")
+            .eq("id",user.id)
+            .single();
 
-  document.getElementById("welcome").textContent =
-    "Welcome, " + profile.email;
+        if(error || !profile){
 
-  document.getElementById("role").textContent =
-    "Account: " + profile.role;
+            await db.auth.signOut();
 
-  if(currentRole === "admin"){
-    document.getElementById("admin").classList.remove("hidden");
-    document.getElementById("student").classList.add("hidden");
-    loadTests();
-  }else{
-    document.getElementById("student").classList.remove("hidden");
-    document.getElementById("admin").classList.add("hidden");
-  }
+            showLogin();
+
+            msg("Profile not found. Contact the administrator.");
+            return;
+        }
+
+        // APPROVAL CHECK
+        if(profile.role !== "admin" && profile.approval_status !== "approved"){
+
+            const status = profile.approval_status;
+
+            await db.auth.signOut();
+
+            showLogin();
+
+            if(status === "pending"){
+                msg("Your registration is pending Admin approval. Please wait.");
+            }else if(status === "rejected"){
+                msg("Your registration was rejected. Contact the administrator.");
+            }else{
+                msg("Your account is not approved.");
+            }
+
+            return;
+        }
+
+        if(profile.role === "admin" && profile.approval_status !== "approved"){
+            await db.auth.signOut();
+            showLogin();
+            msg("Admin account is not approved.");
+            return;
+        }
+
+        currentRole = profile.role;
+
+        document.getElementById("auth").classList.add("hidden");
+        document.getElementById("resetSection").classList.add("hidden");
+        document.getElementById("dashboard").classList.remove("hidden");
+
+        document.getElementById("welcome").textContent =
+            "Welcome, " + profile.email;
+
+        document.getElementById("role").textContent =
+            "Account: " + profile.role;
+
+        if(currentRole === "admin"){
+
+            document.getElementById("admin").classList.remove("hidden");
+            document.getElementById("student").classList.add("hidden");
+
+            await loadPendingStudents();
+            await loadTests();
+
+        }else{
+
+            document.getElementById("student").classList.remove("hidden");
+            document.getElementById("admin").classList.add("hidden");
+        }
+
+    }finally{
+        dashboardLoading = false;
+    }
 }
 
+// LOGOUT
 async function logout(){
-  await db.auth.signOut();
-  location.reload();
+
+    await db.auth.signOut();
+
+    currentUser = null;
+    currentRole = null;
+
+    location.reload();
+}
+
+// LOAD PENDING STUDENTS
+async function loadPendingStudents(){
+
+    const container = document.getElementById("pendingStudents");
+
+    container.textContent = "Loading students...";
+
+    const {data,error} = await db.rpc("admin_list_pending_students");
+
+    if(error){
+        container.textContent = "Unable to load students: " + error.message;
+        return;
+    }
+
+    container.innerHTML = "";
+
+    if(!data || data.length === 0){
+        container.textContent = "No pending students.";
+        return;
+    }
+
+    data.forEach(student => {
+
+        const row = document.createElement("div");
+        row.className = "student-row";
+
+        const email = document.createElement("p");
+        email.className = "student-email";
+        email.textContent = student.email;
+
+        const status = document.createElement("p");
+        status.className = "status";
+        status.textContent = "Status: Pending Approval";
+
+        const approveButton = document.createElement("button");
+        approveButton.className = "success";
+        approveButton.textContent = "Approve";
+
+        approveButton.onclick = () => approveStudent(student.id);
+
+        const rejectButton = document.createElement("button");
+        rejectButton.className = "danger";
+        rejectButton.textContent = "Reject";
+
+        rejectButton.onclick = () => rejectStudent(student.id);
+
+        row.appendChild(email);
+        row.appendChild(status);
+        row.appendChild(approveButton);
+        row.appendChild(rejectButton);
+
+        container.appendChild(row);
+    });
+}
+
+// APPROVE STUDENT
+async function approveStudent(studentId){
+
+    if(!confirm("Approve this student?")) return;
+
+    const {error} = await db.rpc("admin_approve_student",{
+        p_student_id:studentId
+    });
+
+    if(error){
+        msg("Approval failed: " + error.message);
+        return;
+    }
+
+    msg("Student approved successfully.");
+
+    await loadPendingStudents();
+}
+
+// REJECT STUDENT
+async function rejectStudent(studentId){
+
+    if(!confirm("Reject this student?")) return;
+
+    const {error} = await db.rpc("admin_reject_student",{
+        p_student_id:studentId
+    });
+
+    if(error){
+        msg("Rejection failed: " + error.message);
+        return;
+    }
+
+    msg("Student rejected.");
+
+    await loadPendingStudents();
 }
 
 // INVITE STUDENT
 async function inviteStudent(){
-  const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
 
-  if(!email){
-    msg("Enter student email.");
-    return;
-  }
+    const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
 
-  const {error} = await db.from("invitations").insert({email});
+    if(!email){
+        msg("Enter student email.");
+        return;
+    }
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {error} = await db.from("invitations").insert({email});
 
-  msg("Invitation added for " + email + ". Student can now register.");
-  document.getElementById("inviteEmail").value = "";
+    if(error){
+        msg(error.message);
+        return;
+    }
+
+    msg("Invitation added for " + email + ". Student can now register.");
+
+    document.getElementById("inviteEmail").value = "";
 }
 
 // CREATE TEST
 async function createTest(){
-  const title = document.getElementById("testTitle").value.trim();
-  const subject = document.getElementById("subject").value;
-  const duration = Number(document.getElementById("duration").value);
 
-  if(!title || !duration || duration < 1){
-    msg("Enter valid test details.");
-    return;
-  }
+    const title = document.getElementById("testTitle").value.trim();
+    const subject = document.getElementById("subject").value;
+    const duration = Number(document.getElementById("duration").value);
 
-  const {data,error} = await db.from("tests").insert({
-    title,
-    subject,
-    duration_minutes:duration,
-    published:false
-  }).select().single();
+    if(!title || !duration || duration < 1){
+        msg("Enter valid test details.");
+        return;
+    }
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {data,error} = await db.from("tests").insert({
+        title,
+        subject,
+        duration_minutes:duration,
+        published:false
+    }).select().single();
 
-  document.getElementById("testStatus").textContent =
-    "Test created: " + data.title;
+    if(error){
+        msg(error.message);
+        return;
+    }
 
-  document.getElementById("testTitle").value = "";
-  loadTests();
+    document.getElementById("testStatus").textContent =
+        "Test created: " + data.title;
+
+    document.getElementById("testTitle").value = "";
+
+    await loadTests();
 }
 
 // LOAD TESTS
 async function loadTests(){
-  const {data,error} = await db.from("tests")
-    .select("id,title,subject")
-    .order("id",{ascending:false});
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    const {data,error} = await db.from("tests")
+        .select("id,title,subject")
+        .order("id",{ascending:false});
 
-  const select = document.getElementById("testSelect");
-  select.innerHTML = '<option value="">Select a test</option>';
+    if(error){
+        msg(error.message);
+        return;
+    }
 
-  data.forEach(t=>{
-    const option = document.createElement("option");
-    option.value = t.id;
-    option.textContent = t.title + " - " + t.subject;
-    select.appendChild(option);
-  });
+    const select = document.getElementById("testSelect");
+
+    select.innerHTML = '<option value="">Select a test</option>';
+
+    data.forEach(t => {
+
+        const option = document.createElement("option");
+
+        option.value = t.id;
+        option.textContent = t.title + " - " + t.subject;
+
+        select.appendChild(option);
+    });
 }
 
 // CSV PARSER
 function parseCSV(text){
-  const rows = [];
-  let row = [], field = "", quoted = false;
 
-  for(let i=0;i<text.length;i++){
-    const c = text[i];
+    const rows = [];
+    let row = [], field = "", quoted = false;
 
-    if(c === '"'){
-      if(quoted && text[i+1] === '"'){
-        field += '"';
-        i++;
-      }else{
-        quoted = !quoted;
-      }
-    }else if(c === ',' && !quoted){
-      row.push(field);
-      field = "";
-    }else if((c === '\n' || c === '\r') && !quoted){
-      if(c === '\r' && text[i+1] === '\n') i++;
-      row.push(field);
-      field = "";
+    for(let i=0;i<text.length;i++){
 
-      if(row.some(x=>x.trim() !== "")) rows.push(row);
-      row = [];
-    }else{
-      field += c;
+        const c = text[i];
+
+        if(c === '"'){
+
+            if(quoted && text[i+1] === '"'){
+                field += '"';
+                i++;
+            }else{
+                quoted = !quoted;
+            }
+
+        }else if(c === ',' && !quoted){
+
+            row.push(field);
+            field = "";
+
+        }else if((c === '\n' || c === '\r') && !quoted){
+
+            if(c === '\r' && text[i+1] === '\n') i++;
+
+            row.push(field);
+            field = "";
+
+            if(row.some(x=>x.trim() !== "")) rows.push(row);
+
+            row = [];
+
+        }else{
+
+            field += c;
+        }
     }
-  }
 
-  row.push(field);
-  if(row.some(x=>x.trim() !== "")) rows.push(row);
+    row.push(field);
 
-  return rows;
+    if(row.some(x=>x.trim() !== "")) rows.push(row);
+
+    return rows;
 }
 
 // UPLOAD CSV
 async function uploadCSV(){
-  const testId = document.getElementById("testSelect").value;
-  const file = document.getElementById("csvFile").files[0];
 
-  if(!testId || !file){
-    msg("Select a test and CSV file.");
-    return;
-  }
+    const testId = document.getElementById("testSelect").value;
+    const file = document.getElementById("csvFile").files[0];
 
-  const status = document.getElementById("uploadStatus");
-  status.textContent = "Reading CSV...";
-
-  try{
-    const rows = parseCSV(await file.text());
-
-    if(rows.length < 2){
-      throw Error("CSV has no question rows.");
+    if(!testId || !file){
+        msg("Select a test and CSV file.");
+        return;
     }
 
-    const headers = rows[0].map(x=>x.trim().toLowerCase());
+    const status = document.getElementById("uploadStatus");
 
-    const required = [
-      "question","optiona","optionb","optionc",
-      "optiond","correct_index","explanation"
-    ];
+    status.textContent = "Reading CSV...";
 
-    const indexes = required.map(h=>headers.indexOf(h));
+    try{
 
-    if(indexes.some(i=>i<0)){
-      throw Error("CSV headers do not match the required format.");
+        const rows = parseCSV(await file.text());
+
+        if(rows.length < 2){
+            throw Error("CSV has no question rows.");
+        }
+
+        const headers = rows[0].map(x=>x.trim().toLowerCase());
+
+        const required = [
+            "question","optiona","optionb","optionc",
+            "optiond","correct_index","explanation"
+        ];
+
+        const indexes = required.map(h=>headers.indexOf(h));
+
+        if(indexes.some(i=>i<0)){
+            throw Error("CSV headers do not match the required format.");
+        }
+
+        const questions = rows.slice(1).map((r,i)=>{
+
+            const get = h => r[indexes[required.indexOf(h)]]?.trim() || "";
+
+            const answer = Number(get("correct_index"));
+            const q = get("question");
+
+            const options = [
+                "optiona","optionb","optionc","optiond"
+            ].map(get);
+
+            if(!q || options.some(x=>!x) || ![0,1,2,3].includes(answer)){
+                throw Error("Invalid question or answer index on CSV row " + (i+2));
+            }
+
+            return {
+                test_id:Number(testId),
+                question:q,
+                options,
+                correct_index:answer,
+                explanation:get("explanation")
+            };
+        });
+
+        for(let i=0;i<questions.length;i+=100){
+
+            const {error} = await db.from("questions")
+                .insert(questions.slice(i,i+100));
+
+            if(error) throw error;
+        }
+
+        status.textContent =
+            questions.length + " questions uploaded successfully.";
+
+    }catch(e){
+
+        status.textContent = "Upload failed: " + e.message;
     }
-
-    const questions = rows.slice(1).map((r,i)=>{
-      const get = h => r[indexes[required.indexOf(h)]]?.trim() || "";
-
-      const answer = Number(get("correct_index"));
-      const q = get("question");
-
-      const options = [
-        "optiona","optionb","optionc","optiond"
-      ].map(get);
-
-      if(!q || options.some(x=>!x) || ![0,1,2,3].includes(answer)){
-        throw Error("Invalid question or answer index on CSV row " + (i+2));
-      }
-
-      return {
-        test_id:Number(testId),
-        question:q,
-        options,
-        correct_index:answer,
-        explanation:get("explanation")
-      };
-    });
-
-    for(let i=0;i<questions.length;i+=100){
-      const {error} = await db.from("questions")
-        .insert(questions.slice(i,i+100));
-
-      if(error) throw error;
-    }
-
-    status.textContent =
-      questions.length + " questions uploaded successfully.";
-
-  }catch(e){
-    status.textContent = "Upload failed: " + e.message;
-  }
 }
 
-// HANDLE SUPABASE AUTH EVENTS
+// AUTH EVENTS
 db.auth.onAuthStateChange((event,session)=>{
 
-  if(event === "PASSWORD_RECOVERY"){
-    showResetPassword();
-    return;
-  }
+    if(event === "PASSWORD_RECOVERY"){
+        showResetPassword();
+        return;
+    }
 
-  if(event === "SIGNED_IN" && session && !recoveryMode){
-    loadDashboard(session.user);
-  }
-
+    if(event === "SIGNED_IN" && session && !recoveryMode){
+        loadDashboard(session.user);
+    }
 });
 
 // CHECK EXISTING SESSION
 db.auth.getSession().then(({data,error})=>{
 
-  if(error){
-    msg(error.message);
-    return;
-  }
+    if(error){
+        msg(error.message);
+        return;
+    }
 
-  if(recoveryMode){
-    showResetPassword();
-    return;
-  }
+    if(recoveryMode){
+        showResetPassword();
+        return;
+    }
 
-  if(data.session){
-    loadDashboard(data.session.user);
-  }
-
+    if(data.session){
+        loadDashboard(data.session.user);
+    }
 });
 </script>
 
