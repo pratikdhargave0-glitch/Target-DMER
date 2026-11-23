@@ -16,27 +16,46 @@ button{background:#174b91;color:white;border:0;padding:12px 17px;border-radius:7
 .secondary{background:#65758b}
 .hidden{display:none}
 h2{color:#174b91}
-#message{padding:12px;margin:10px 0}
+#message{padding:12px;margin:10px 0;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
+
 <header>
 <h1>MPSC TARGET</h1>
 <p>Practice • Improve • Succeed</p>
 </header>
+
 <main>
 <div id="message"></div>
 
+<!-- LOGIN -->
 <section id="auth" class="card">
 <h2>Welcome to MPSC Target</h2>
 <p>Login or register with your invited email.</p>
+
 <input id="email" type="email" placeholder="Email address">
 <input id="password" type="password" placeholder="Password">
+
 <button onclick="login()">Login</button>
 <button onclick="signup()">Student Registration</button>
+<button class="secondary" onclick="forgotPassword()">Forgot Password?</button>
 </section>
 
+<!-- PASSWORD RESET -->
+<section id="resetSection" class="card hidden">
+<h2>Set New Password</h2>
+<p>Enter your new password below.</p>
+
+<input id="newPassword" type="password" placeholder="New Password">
+<input id="confirmPassword" type="password" placeholder="Confirm New Password">
+
+<button onclick="updatePassword()">Update Password</button>
+</section>
+
+<!-- DASHBOARD -->
 <section id="dashboard" class="hidden">
+
 <div class="card">
 <h2>Dashboard</h2>
 <p id="welcome"></p>
@@ -45,6 +64,7 @@ h2{color:#174b91}
 </div>
 
 <div id="admin" class="hidden">
+
 <div class="card">
 <h2>Admin Panel</h2>
 <h3>Invite Student</h3>
@@ -54,7 +74,9 @@ h2{color:#174b91}
 
 <div class="card">
 <h3>Create New Test</h3>
+
 <input id="testTitle" placeholder="Test name">
+
 <select id="subject">
 <option>History</option>
 <option>Geography</option>
@@ -65,7 +87,9 @@ h2{color:#174b91}
 <option>Reasoning</option>
 <option>Current Affairs</option>
 </select>
+
 <input id="duration" type="number" value="30" placeholder="Duration in minutes">
+
 <button onclick="createTest()">Create Test</button>
 <p id="testStatus"></p>
 </div>
@@ -73,28 +97,37 @@ h2{color:#174b91}
 <div class="card">
 <h3>Bulk Question Upload</h3>
 <p>First create a test, then select it below.</p>
+
 <select id="testSelect">
 <option value="">Select a test</option>
 </select>
+
 <p>Upload CSV with these columns:</p>
 <code>question,optionA,optionB,optionC,optionD,correct_index,explanation</code>
+
 <p>Correct index: A = 0, B = 1, C = 2, D = 3.</p>
+
 <input type="file" id="csvFile" accept=".csv">
+
 <button onclick="uploadCSV()">Upload Questions</button>
 <p id="uploadStatus"></p>
 </div>
+
 </div>
 
 <div id="student" class="card hidden">
 <h2>Student Dashboard</h2>
 <p>Your account is active. Tests will appear here once the secure test system is ready.</p>
 </div>
+
 </section>
 </main>
 
 <script>
 const SUPABASE_URL = "https://clmbeouqkgyudnlirkcf.supabase.co";
 const SUPABASE_KEY = "sb_publishable_wjOfHVj9lgOnk5p18HtfJA_aeSPNhnf";
+
+const SITE_URL = "https://pratikdhargave0-glitch.github.io/Target-DMER/";
 
 const db = window.supabase.createClient(
   SUPABASE_URL,
@@ -103,168 +136,384 @@ const db = window.supabase.createClient(
 
 let currentUser = null;
 let currentRole = null;
+let recoveryMode = window.location.hash.includes("type=recovery");
 
 function msg(text){
- document.getElementById("message").textContent=text;
+  document.getElementById("message").textContent = text;
+}
+
+function showLogin(){
+  document.getElementById("auth").classList.remove("hidden");
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("resetSection").classList.add("hidden");
+}
+
+function showResetPassword(){
+  recoveryMode = true;
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("resetSection").classList.remove("hidden");
+  msg("Recovery verified. Please set your new password.");
 }
 
 async function login(){
- const email=document.getElementById("email").value.trim();
- const password=document.getElementById("password").value;
- const {data,error}=await db.auth.signInWithPassword({email,password});
- if(error){msg(error.message);return;}
- await loadDashboard(data.user);
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  if(!email || !password){
+    msg("Enter email and password.");
+    return;
+  }
+
+  const {data,error} = await db.auth.signInWithPassword({
+    email,password
+  });
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  recoveryMode = false;
+  await loadDashboard(data.user);
 }
 
 async function signup(){
- const email=document.getElementById("email").value.trim();
- const password=document.getElementById("password").value;
- if(password.length<8){msg("Password must be at least 8 characters.");return;}
- const {data,error}=await db.auth.signUp({email,password});
- if(error){msg(error.message);return;}
- msg("Registration submitted. Check your email for confirmation if required.");
- if(data.session) await loadDashboard(data.user);
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  if(!email || password.length < 8){
+    msg("Enter a valid email and password of at least 8 characters.");
+    return;
+  }
+
+  const {data,error} = await db.auth.signUp({
+    email,password
+  });
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  msg("Registration submitted. Check your email for confirmation if required.");
+
+  if(data.session){
+    await loadDashboard(data.user);
+  }
 }
 
+// SEND PASSWORD RECOVERY EMAIL
+async function forgotPassword(){
+  const email = document.getElementById("email").value.trim();
+
+  if(!email){
+    msg("First enter your registered email address.");
+    return;
+  }
+
+  const {error} = await db.auth.resetPasswordForEmail(email,{
+    redirectTo: SITE_URL
+  });
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  msg("Password recovery email sent. Please check your Gmail.");
+}
+
+// UPDATE NEW PASSWORD
+async function updatePassword(){
+  const password = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
+
+  if(password.length < 8){
+    msg("Password must be at least 8 characters.");
+    return;
+  }
+
+  if(password !== confirm){
+    msg("Passwords do not match.");
+    return;
+  }
+
+  const {data,error} = await db.auth.updateUser({
+    password: password
+  });
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  recoveryMode = false;
+
+  document.getElementById("newPassword").value = "";
+  document.getElementById("confirmPassword").value = "";
+
+  await db.auth.signOut();
+
+  history.replaceState(null,"",SITE_URL);
+
+  showLogin();
+  msg("Password updated successfully. Now login with your new password.");
+}
+
+// LOAD USER DASHBOARD
 async function loadDashboard(user){
- currentUser=user;
- const {data:profile,error}=await db.from("profiles")
- .select("role,email").eq("id",user.id).single();
+  currentUser = user;
 
- if(error || !profile){
-   msg("Profile not found. Contact the administrator.");
-   return;
- }
- currentRole=profile.role;
- document.getElementById("auth").classList.add("hidden");
- document.getElementById("dashboard").classList.remove("hidden");
- document.getElementById("welcome").textContent="Welcome, "+profile.email;
- document.getElementById("role").textContent="Account: "+profile.role;
+  const {data:profile,error} = await db.from("profiles")
+    .select("role,email")
+    .eq("id",user.id)
+    .single();
 
- if(currentRole==="admin"){
-   document.getElementById("admin").classList.remove("hidden");
-   document.getElementById("student").classList.add("hidden");
-   loadTests();
- }else{
-   document.getElementById("student").classList.remove("hidden");
-   document.getElementById("admin").classList.add("hidden");
- }
+  if(error || !profile){
+    msg("Profile not found. Contact the administrator.");
+    return;
+  }
+
+  currentRole = profile.role;
+
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("resetSection").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+
+  document.getElementById("welcome").textContent =
+    "Welcome, " + profile.email;
+
+  document.getElementById("role").textContent =
+    "Account: " + profile.role;
+
+  if(currentRole === "admin"){
+    document.getElementById("admin").classList.remove("hidden");
+    document.getElementById("student").classList.add("hidden");
+    loadTests();
+  }else{
+    document.getElementById("student").classList.remove("hidden");
+    document.getElementById("admin").classList.add("hidden");
+  }
 }
 
 async function logout(){
- await db.auth.signOut();
- location.reload();
+  await db.auth.signOut();
+  location.reload();
 }
 
+// INVITE STUDENT
 async function inviteStudent(){
- const email=document.getElementById("inviteEmail").value.trim().toLowerCase();
- if(!email){msg("Enter student email.");return;}
- const {error}=await db.from("invitations").insert({email});
- if(error){msg(error.message);return;}
- msg("Invitation added for "+email+". Student can now register.");
- document.getElementById("inviteEmail").value="";
-}
+  const email = document.getElementById("inviteEmail").value.trim().toLowerCase();
 
-async function createTest(){
- const title=document.getElementById("testTitle").value.trim();
- const subject=document.getElementById("subject").value;
- const duration=Number(document.getElementById("duration").value);
- if(!title || !duration || duration<1){msg("Enter valid test details.");return;}
-
- const {data,error}=await db.from("tests").insert({
-   title,subject,duration_minutes:duration,published:false
- }).select().single();
-
- if(error){msg(error.message);return;}
- document.getElementById("testStatus").textContent="Test created: "+data.title;
- document.getElementById("testTitle").value="";
- loadTests();
-}
-
-async function loadTests(){
- const {data,error}=await db.from("tests")
- .select("id,title,subject")
- .order("id",{ascending:false});
-
- if(error){msg(error.message);return;}
- const select=document.getElementById("testSelect");
- select.innerHTML='<option value="">Select a test</option>';
- data.forEach(t=>{
-  const option=document.createElement("option");
-  option.value=t.id;
-  option.textContent=t.title+" - "+t.subject;
-  select.appendChild(option);
- });
-}
-
-// CSV parser supports quoted fields and commas inside quotes
-function parseCSV(text){
- const rows=[];
- let row=[],field="",quoted=false;
- for(let i=0;i<text.length;i++){
-  const c=text[i];
-  if(c==='"'){
-   if(quoted && text[i+1]==='"'){field+='"';i++;}
-   else quoted=!quoted;
-  }else if(c===',' && !quoted){
-   row.push(field);field="";
-  }else if((c==='\n'||c==='\r')&&!quoted){
-   if(c==='\r'&&text[i+1]==='\n')i++;
-   row.push(field);field="";
-   if(row.some(x=>x.trim()!==""))rows.push(row);
-   row=[];
-  }else field+=c;
- }
- row.push(field);
- if(row.some(x=>x.trim()!==""))rows.push(row);
- return rows;
-}
-
-async function uploadCSV(){
- const testId=document.getElementById("testSelect").value;
- const file=document.getElementById("csvFile").files[0];
- if(!testId||!file){msg("Select a test and CSV file.");return;}
-
- const status=document.getElementById("uploadStatus");
- status.textContent="Reading CSV...";
- try{
-  const rows=parseCSV(await file.text());
-  if(rows.length<2)throw Error("CSV has no question rows.");
-
-  const headers=rows[0].map(x=>x.trim().toLowerCase());
-  const required=["question","optiona","optionb","optionc","optiond","correct_index","explanation"];
-  const indexes=required.map(h=>headers.indexOf(h));
-  if(indexes.some(i=>i<0))throw Error("CSV headers do not match the required format.");
-
-  const questions=rows.slice(1).map((r,i)=>{
-   const get=h=>r[indexes[required.indexOf(h)]]?.trim()||"";
-   const answer=Number(get("correct_index"));
-   const q=get("question");
-   const options=["optiona","optionb","optionc","optiond"].map(get);
-   if(!q||options.some(x=>!x)||![0,1,2,3].includes(answer))
-    throw Error("Invalid question or answer index on CSV row "+(i+2));
-   return {
-    test_id:Number(testId),
-    question:q,
-    options,
-    correct_index:answer,
-    explanation:get("explanation")
-   };
-  });
-
-  for(let i=0;i<questions.length;i+=100){
-   const {error}=await db.from("questions").insert(questions.slice(i,i+100));
-   if(error)throw error;
+  if(!email){
+    msg("Enter student email.");
+    return;
   }
-  status.textContent=questions.length+" questions uploaded successfully.";
- }catch(e){
-  status.textContent="Upload failed: "+e.message;
- }
+
+  const {error} = await db.from("invitations").insert({email});
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  msg("Invitation added for " + email + ". Student can now register.");
+  document.getElementById("inviteEmail").value = "";
 }
 
-db.auth.getSession().then(({data})=>{
- if(data.session)loadDashboard(data.session.user);
+// CREATE TEST
+async function createTest(){
+  const title = document.getElementById("testTitle").value.trim();
+  const subject = document.getElementById("subject").value;
+  const duration = Number(document.getElementById("duration").value);
+
+  if(!title || !duration || duration < 1){
+    msg("Enter valid test details.");
+    return;
+  }
+
+  const {data,error} = await db.from("tests").insert({
+    title,
+    subject,
+    duration_minutes:duration,
+    published:false
+  }).select().single();
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  document.getElementById("testStatus").textContent =
+    "Test created: " + data.title;
+
+  document.getElementById("testTitle").value = "";
+  loadTests();
+}
+
+// LOAD TESTS
+async function loadTests(){
+  const {data,error} = await db.from("tests")
+    .select("id,title,subject")
+    .order("id",{ascending:false});
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  const select = document.getElementById("testSelect");
+  select.innerHTML = '<option value="">Select a test</option>';
+
+  data.forEach(t=>{
+    const option = document.createElement("option");
+    option.value = t.id;
+    option.textContent = t.title + " - " + t.subject;
+    select.appendChild(option);
+  });
+}
+
+// CSV PARSER
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", quoted = false;
+
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+
+    if(c === '"'){
+      if(quoted && text[i+1] === '"'){
+        field += '"';
+        i++;
+      }else{
+        quoted = !quoted;
+      }
+    }else if(c === ',' && !quoted){
+      row.push(field);
+      field = "";
+    }else if((c === '\n' || c === '\r') && !quoted){
+      if(c === '\r' && text[i+1] === '\n') i++;
+      row.push(field);
+      field = "";
+
+      if(row.some(x=>x.trim() !== "")) rows.push(row);
+      row = [];
+    }else{
+      field += c;
+    }
+  }
+
+  row.push(field);
+  if(row.some(x=>x.trim() !== "")) rows.push(row);
+
+  return rows;
+}
+
+// UPLOAD CSV
+async function uploadCSV(){
+  const testId = document.getElementById("testSelect").value;
+  const file = document.getElementById("csvFile").files[0];
+
+  if(!testId || !file){
+    msg("Select a test and CSV file.");
+    return;
+  }
+
+  const status = document.getElementById("uploadStatus");
+  status.textContent = "Reading CSV...";
+
+  try{
+    const rows = parseCSV(await file.text());
+
+    if(rows.length < 2){
+      throw Error("CSV has no question rows.");
+    }
+
+    const headers = rows[0].map(x=>x.trim().toLowerCase());
+
+    const required = [
+      "question","optiona","optionb","optionc",
+      "optiond","correct_index","explanation"
+    ];
+
+    const indexes = required.map(h=>headers.indexOf(h));
+
+    if(indexes.some(i=>i<0)){
+      throw Error("CSV headers do not match the required format.");
+    }
+
+    const questions = rows.slice(1).map((r,i)=>{
+      const get = h => r[indexes[required.indexOf(h)]]?.trim() || "";
+
+      const answer = Number(get("correct_index"));
+      const q = get("question");
+
+      const options = [
+        "optiona","optionb","optionc","optiond"
+      ].map(get);
+
+      if(!q || options.some(x=>!x) || ![0,1,2,3].includes(answer)){
+        throw Error("Invalid question or answer index on CSV row " + (i+2));
+      }
+
+      return {
+        test_id:Number(testId),
+        question:q,
+        options,
+        correct_index:answer,
+        explanation:get("explanation")
+      };
+    });
+
+    for(let i=0;i<questions.length;i+=100){
+      const {error} = await db.from("questions")
+        .insert(questions.slice(i,i+100));
+
+      if(error) throw error;
+    }
+
+    status.textContent =
+      questions.length + " questions uploaded successfully.";
+
+  }catch(e){
+    status.textContent = "Upload failed: " + e.message;
+  }
+}
+
+// HANDLE SUPABASE AUTH EVENTS
+db.auth.onAuthStateChange((event,session)=>{
+
+  if(event === "PASSWORD_RECOVERY"){
+    showResetPassword();
+    return;
+  }
+
+  if(event === "SIGNED_IN" && session && !recoveryMode){
+    loadDashboard(session.user);
+  }
+
+});
+
+// CHECK EXISTING SESSION
+db.auth.getSession().then(({data,error})=>{
+
+  if(error){
+    msg(error.message);
+    return;
+  }
+
+  if(recoveryMode){
+    showResetPassword();
+    return;
+  }
+
+  if(data.session){
+    loadDashboard(data.session.user);
+  }
+
 });
 </script>
+
 </body>
 </html>
