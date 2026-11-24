@@ -921,6 +921,19 @@ wrong++;
 });
 
 const score=correct-wrong*0.25;
+  const { error: saveError } = await db.from("test_results").insert({
+    user_id: currentUser.id,
+    test_name: "MPSC Test",
+    total_questions: examQuestions.length,
+    correct_answers: correct,
+    wrong_answers: wrong,
+    score: score,
+    percentage: (score / examQuestions.length) * 100
+});
+
+if(saveError){
+    console.error("Result save error:", saveError);
+}
 
 showOnly("resultScreen");
 
