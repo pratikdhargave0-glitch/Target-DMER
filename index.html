@@ -754,6 +754,63 @@ div.append(title,info,btn);
 box.appendChild(div);
 });
 }
+  async function loadTestHistory(){
+
+const box=document.getElementById("testHistory");
+
+box.textContent="Loading test history...";
+
+if(!currentUser){
+box.textContent="Please login first.";
+return;
+}
+
+const {data,error}=await db
+.from("test_results")
+.select("test_name,total_questions,correct_answers,wrong_answers,score,percentage,created_at")
+.eq("user_id",currentUser.id)
+.order("created_at",{ascending:false});
+
+if(error){
+box.textContent="Could not load history: "+error.message;
+return;
+}
+
+box.innerHTML="";
+
+if(!data||data.length===0){
+box.textContent="No test history available yet.";
+return;
+}
+
+data.forEach((r,index)=>{
+
+const div=document.createElement("div");
+div.className="item";
+
+const title=document.createElement("strong");
+title.textContent=(index+1)+". "+(r.test_name||"MPSC Test");
+
+const date=document.createElement("p");
+date.textContent="Date: "+new Date(r.created_at).toLocaleString();
+
+const details=document.createElement("p");
+details.textContent=
+"Total: "+r.total_questions+
+" | Correct: "+r.correct_answers+
+" | Wrong: "+r.wrong_answers;
+
+const score=document.createElement("p");
+score.textContent=
+"Score: "+r.score+
+" | Percentage: "+Number(r.percentage).toFixed(2)+"%";
+
+div.append(title,date,details,score);
+box.appendChild(div);
+
+});
+
+  }
 
 // START TEST
 async function startTest(test){
