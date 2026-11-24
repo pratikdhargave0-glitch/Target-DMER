@@ -265,40 +265,7 @@ await loadDashboard(data.user);
 }
 
 // REGISTRATION
-async function signup(){
-
-const email = document.getElementById("email").value.trim();
-const password = document.getElementById("password").value;
-
-if(!email || !password){
-    return message("authMessage","Enter email and password.",true);
-}
-
-if(password.length < 6){
-    return message("authMessage","Password must be at least 6 characters.",true);
-}
-
-message("authMessage","Creating student account...");
-
-const {data,error} = await db.auth.signUp({
-    email: email,
-    password: password,
-    options: {
-        emailRedirectTo: window.location.origin + window.location.pathname
-    }
-});
-
-if(error){
-    return message("authMessage",error.message,true);
-}
-
-message(
-    "authMessage",
-    "Registration successful! Please verify your email. Your account will remain pending until Admin approval."
-);
-
-}
-  {
+async function signup()  {
 const email=document.getElementById("email").value.trim();
 const password=document.getElementById("password").value;
 
@@ -324,7 +291,6 @@ return message("authMessage",profileError.message,true);
 
 message("authMessage","Registration submitted. Check your email if confirmation is required. Admin approval is required.");
 }
-
 // FORGOT PASSWORD
 async function forgotPassword(){
 const email=document.getElementById("email").value.trim();
